@@ -1,5 +1,6 @@
-// WebAudio による効果音・環境音（音源ファイル不要）
-let ctx = null, master = null, ambGain = null, ambNodes = [];
+// WebAudio による効果音・環境音・BGM
+// BGM とジングルは tools/music（「かなでる」で作曲）から書き出した audio/*.mp3
+let ctx = null, master = null, ambGain = null, ambNodes = [], musicBus = null;
 let enabled = true;
 
 function ensure() {
@@ -11,8 +12,11 @@ function ensure() {
     master.gain.value = enabled ? 0.8 : 0;
     master.connect(ctx.destination);
     ambGain = ctx.createGain();
-    ambGain.gain.value = 0.5;
+    ambGain.gain.value = 0.35;
     ambGain.connect(master);
+    musicBus = ctx.createGain();
+    musicBus.gain.value = 1;
+    musicBus.connect(master);
   }
   if (ctx.state === 'suspended') ctx.resume();
   return ctx;
@@ -22,7 +26,11 @@ export function setEnabled(v) {
   enabled = v;
   if (master) master.gain.value = v ? 0.8 : 0;
 }
-export function unlock() { ensure(); }
+export function unlock() {
+  if (!ensure()) return;
+  // 操作前に頼まれていた BGM を、ここで始める
+  if (wanted && (!current || current.name !== wanted)) music(wanted);
+}
 
 let noiseBuf = null;
 function noise() {
@@ -110,15 +118,112 @@ export function ambient(kind) {
     add(noise(), (f) => { f.type = 'lowpass'; f.frequency.value = 700; }, 0.2, { f: 0.12, depth: 0.17 });
     add(noise(), (f) => { f.type = 'bandpass'; f.frequency.value = 2500; f.Q.value = 0.5; }, 0.03, { f: 0.12, depth: 0.03 });
   }
-  if (kind === 'cicada' || kind === 'river' || kind === 'sea') {
-    // セミ（ミンミン風の変調）
-    const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = 4200;
-    add(o, (f) => { f.type = 'bandpass'; f.frequency.value = 4400; f.Q.value = 8; }, kind === 'cicada' ? 0.03 : 0.012, { f: 9, depth: kind === 'cicada' ? 0.025 : 0.01 });
-  }
-  if (kind === 'night') {
-    // 虫の声（コオロギ風）
-    const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = 4800;
-    add(o, (f) => { f.type = 'bandpass'; f.frequency.value = 4800; f.Q.value = 10; }, 0.02, { f: 22, depth: 0.02 });
-    add(noise(), (f) => { f.type = 'bandpass'; f.frequency.value = 900; f.Q.value = 0.4; }, 0.05);
-  }
+}
+
+/* ===================== BGM ===================== */
+// bars 小節ぶんが1ループ。ファイルの最後には余韻が入っているので、
+// 次のループを余韻に重ねて始めると、つなぎ目なく聞こえる。
+// （同じバッファを重ねるので、MP3 の先頭の遅延も両方で同じになり、拍がずれない）
+const TRACKS = {
+  home: { bpm: 84, bars: 16, vol: 0.9 },
+  field: { bpm: 108, bars: 16, vol: 0.85 },
+  night: { bpm: 70, bars: 12, vol: 1 },
+  sumo: { bpm: 128, bars: 16, vol: 0.85 },
+};
+const JINGLES = { win: 0.95, lose: 0.95, catch: 0.9 };
+const buffers = new Map();
+const loading = new Map();
+let current = null;      // { name, gain, next, sources, timer }
+let wanted = null;
+
+function load(name) {
+  if (buffers.has(name)) return Promise.resolve(buffers.get(name));
+  if (loading.has(name)) return loading.get(name);
+  const p = fetch(`audio/${name}.mp3`)
+    .then((r) => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); })
+    .then((ab) => new Promise((res, rej) => ctx.decodeAudioData(ab, res, rej)))
+    .then((buf) => { buffers.set(name, buf); return buf; })
+    .catch((e) => { console.warn('BGM の読み込みに失敗', name, e); loading.delete(name); return null; });
+  loading.set(name, p);
+  return p;
+}
+
+function fadeOut(track, sec = 1.2) {
+  if (!track) return;
+  clearInterval(track.timer);
+  const t = ctx.currentTime;
+  track.gain.gain.cancelScheduledValues(t);
+  track.gain.gain.setValueAtTime(track.gain.gain.value, t);
+  track.gain.gain.linearRampToValueAtTime(0, t + sec);
+  setTimeout(() => { for (const s of track.sources) { try { s.stop(); } catch (e) { /* noop */ } } track.gain.disconnect(); }, sec * 1000 + 100);
+}
+
+/** BGM を切り替える（同じ曲なら何もしない）。null で止める */
+export function music(name) {
+  wanted = name;
+  if (!ensure()) return;
+  if (current && current.name === name) return;
+  fadeOut(current);
+  current = null;
+  if (!name || !TRACKS[name]) return;
+  load(name).then((buf) => {
+    if (!buf || wanted !== name || (current && current.name === name)) return;
+    const meta = TRACKS[name];
+    const loopLen = meta.bars * 4 * 60 / meta.bpm;
+    const gain = ctx.createGain();
+    gain.connect(musicBus);
+    const t0 = ctx.currentTime + 0.05;
+    gain.gain.setValueAtTime(0, t0);
+    gain.gain.linearRampToValueAtTime(meta.vol, t0 + 1.2);
+    const track = { name, gain, next: t0, sources: [], timer: 0 };
+    const schedule = () => {
+      // 2 秒先までのループを予約
+      while (track.next < ctx.currentTime + 2) {
+        const s = ctx.createBufferSource();
+        s.buffer = buf;
+        s.connect(gain);
+        s.start(track.next);
+        s.onended = () => { const i = track.sources.indexOf(s); if (i >= 0) track.sources.splice(i, 1); };
+        track.sources.push(s);
+        track.next += loopLen;
+      }
+    };
+    schedule();
+    track.timer = setInterval(schedule, 500);
+    current = track;
+  });
+}
+
+/** 勝ち・負け・捕獲のジングル。BGM を下げて鳴らす */
+export function jingle(name, { stopMusic = false } = {}) {
+  if (!ensure() || !enabled) return;
+  if (stopMusic) music(null);
+  load(name).then((buf) => {
+    if (!buf) { sfx(name); return; }
+    const s = ctx.createBufferSource();
+    s.buffer = buf;
+    const g = ctx.createGain();
+    g.gain.value = JINGLES[name] ?? 1;
+    s.connect(g); g.connect(master);
+    const t = ctx.currentTime + 0.02;
+    s.start(t);
+    if (!stopMusic && musicBus) {
+      musicBus.gain.cancelScheduledValues(t);
+      musicBus.gain.setValueAtTime(musicBus.gain.value, t);
+      musicBus.gain.linearRampToValueAtTime(0.18, t + 0.15);
+      musicBus.gain.setValueAtTime(0.18, t + buf.duration - 1);
+      musicBus.gain.linearRampToValueAtTime(1, t + buf.duration + 0.5);
+    }
+  });
+}
+
+/** よく使う曲を先に読み込んでおく */
+export function preload(names = ['home', 'field', 'sumo', 'catch']) {
+  if (!ensure()) return;
+  for (const n of names) load(n);
+}
+
+/** 状態の確認用 */
+export function musicState() {
+  return { ctx: ctx?.state, name: current?.name ?? null, sources: current?.sources.length ?? 0, loaded: [...buffers.keys()] };
 }

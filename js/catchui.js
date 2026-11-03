@@ -10,7 +10,7 @@ export function catchFlow(app, crab, { how = 'hand' } = {}) {
   const isNew = !s.zukan[crab.species];
   Save.registerZukan(s, crab);
   app.save();
-  Audio.sfx('catch');
+  Audio.jingle('catch');
   return new Promise((resolve) => {
     let done = false;
     const finish = (kept) => { if (done) return; done = true; app.save(); resolve(kept); };

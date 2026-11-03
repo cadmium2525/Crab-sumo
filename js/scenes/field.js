@@ -88,7 +88,8 @@ export class FieldScene {
     this.controls.update();
 
     this.particles = [];
-    Audio.ambient(this.night ? 'night' : this.loc);
+    Audio.ambient(this.loc);
+    Audio.music(this.night ? 'night' : 'field');
   }
 
   // ---------- 川 ----------

@@ -1,0 +1,86 @@
+{
+ "name": "Make",
+ "bpm": 90,
+ "sig": [
+  4,
+  4
+ ],
+ "bars": 2,
+ "tail": 2,
+ "key": "D minor",
+ "sends": {
+  "reverb": {
+   "size": 1,
+   "decay": 1.8
+  }
+ },
+ "master": {
+  "loudness": -17,
+  "ceiling": -1
+ },
+ "tracks": [
+  {
+   "id": "brass",
+   "name": "ブラス",
+   "inst": {
+    "preset": "brass",
+    "vibrato": {
+     "rate": 5,
+     "depth": 0.35,
+     "delay": 0.3
+    }
+   },
+   "volume": -2,
+   "sends": {
+    "reverb": 0.2
+   },
+   "clips": [
+    {
+     "at": 0,
+     "notes": [
+      [
+       0,
+       "A3",
+       0.8,
+       0.7
+      ],
+      [
+       1,
+       "G#3",
+       0.8,
+       0.65
+      ],
+      [
+       2,
+       "G3",
+       0.8,
+       0.6
+      ],
+      [
+       3,
+       "F#3",
+       3,
+       0.6
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "taiko",
+   "name": "太鼓",
+   "type": "drums",
+   "kit": "cinematic",
+   "volume": -8,
+   "clips": [
+    {
+     "at": 0,
+     "len": 4,
+     "grid": {
+      "kick": "............X..."
+     }
+    }
+   ]
+  }
+ ]
+}

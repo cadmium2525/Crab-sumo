@@ -54,7 +54,8 @@ export class TankScene {
     this.ring.visible = false;
     scene.add(this.ring);
     this.raycaster = new THREE.Raycaster();
-    Audio.ambient(night ? 'night' : 'cicada');
+    Audio.ambient(null);
+    Audio.music(night ? 'night' : 'home');
   }
 
   // ---- 縁側と庭 ----

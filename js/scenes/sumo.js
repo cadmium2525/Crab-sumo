@@ -103,7 +103,8 @@ export class SumoScene {
     this.particles = [];
     this.result = null;
     this.hud = null;
-    Audio.ambient(this.slot === 3 ? 'night' : 'cicada');
+    Audio.ambient(null);
+    Audio.music('sumo');
   }
 
   makeWild(mine) {
@@ -704,7 +705,7 @@ export class SumoScene {
       setTimeout(() => {
         if (this.selfMode) bigText(`${winner.crab.name}の勝ち！`, { ms: 1800, cls: 'gold small' });
         else bigText(playerWon ? '勝ち！' : '負け…', { ms: 1800, cls: playerWon ? 'gold' : 'red' });
-        Audio.sfx(playerWon || this.selfMode ? 'win' : 'lose');
+        Audio.jingle(playerWon || this.selfMode ? 'win' : 'lose', { stopMusic: true });
       }, 1300);
       setTimeout(() => this.showResult(), 3200);
     }, 500);

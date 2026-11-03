@@ -109,6 +109,7 @@ async function boot() {
   const title = document.getElementById('title');
   const start = async () => {
     Audio.unlock();
+    Audio.preload();
     title.classList.add('hide');
     setTimeout(() => title.remove(), 700);
     if (!app.state.introSeen) {
