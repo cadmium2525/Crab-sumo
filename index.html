@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>相撲クラブ</title>
+<meta name="description" content="川や海でカニをつかまえて、カニ相撲で勝ち上がる夏休みゲーム。">
+<meta name="theme-color" content="#1d3b4a">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Yuji+Syuku&family=Zen+Maru+Gothic:wght@500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cellipse cx='32' cy='38' rx='18' ry='12' fill='%23c4502e'/%3E%3Ccircle cx='12' cy='22' r='7' fill='%23c4502e'/%3E%3Ccircle cx='52' cy='22' r='7' fill='%23c4502e'/%3E%3C/svg%3E">
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three/three.module.min.js",
+    "three/addons/": "./vendor/three/addons/"
+  }
+}
+</script>
+</head>
+<body>
+<canvas id="view"></canvas>
+
+<div id="hud">
+  <div id="hud-info"></div>
+  <button id="btn-sound" class="icon-btn" aria-label="音のオンオフ">♪</button>
+</div>
+<div id="actions"></div>
+<div id="side"></div>
+<div id="bigtext"></div>
+<div id="toast"></div>
+<div id="modal-root"></div>
+
+<div id="title" class="screen">
+  <div class="title-inner">
+    <div class="title-sub">夏休みカニ相撲</div>
+    <h1>相撲クラブ</h1>
+    <div class="title-btns">
+      <button class="btn big primary" id="btn-start">はじめる</button>
+      <button class="btn" id="btn-reset">さいしょから</button>
+    </div>
+    <p class="title-note">川や海でカニをつかまえて、カニ相撲で横綱をめざそう</p>
+  </div>
+</div>
+
+<div id="loading" class="screen"><div class="spinner"></div><p>夏の準備をしています…</p></div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
