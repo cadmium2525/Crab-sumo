@@ -42,7 +42,7 @@ export class TankScene {
     this.controls.enableDamping = true;
     this.controls.minDistance = 3.5;
     this.controls.maxDistance = 16;
-    this.controls.minPolarAngle = 0.5;
+    this.controls.minPolarAngle = 0.12;
     this.controls.maxPolarAngle = 1.52;
     this.controls.minAzimuthAngle = -1.1;
     this.controls.maxAzimuthAngle = 1.1;
@@ -91,10 +91,13 @@ export class TankScene {
       const p = new THREE.Mesh(new THREE.BoxGeometry(0.7, 16, 0.7), woodMat);
       p.position.set(x, 5.6, -3.2); p.castShadow = true; scene.add(p);
     }
-    const beam = new THREE.Mesh(new THREE.BoxGeometry(30, 0.8, 0.9), woodMat);
-    beam.position.set(0, 12.5, -3.2); scene.add(beam);
+    // 軒と梁：カメラが上から見下ろすときは透けて消える（影は残す）
+    const beam = new THREE.Mesh(new THREE.BoxGeometry(30, 0.8, 0.9), woodMat.clone());
+    beam.position.set(0, 12.5, -3.2); beam.castShadow = true; scene.add(beam);
     const eave = new THREE.Mesh(new THREE.BoxGeometry(32, 0.3, 14), new THREE.MeshStandardMaterial({ color: '#3a2a1e', roughness: 0.9 }));
     eave.position.set(0, 13.2, 2); eave.castShadow = true; scene.add(eave);
+    this.roof = [beam, eave];
+    for (const m of this.roof) m.material.transparent = true;
 
     // 庭
     const gt = groundTextures('grass');
@@ -534,6 +537,13 @@ export class TankScene {
       this.camera.lookAt(0, 1.2, 0);
     } else {
       this.controls.update();
+    }
+    // 軒より高い視点になったら屋根を透かす
+    const roofOp = Math.min(1, Math.max(0, (11.8 - this.camera.position.y) / 1.8));
+    for (const m of this.roof) {
+      m.material.opacity = roofOp;
+      m.material.depthWrite = roofOp > 0.99;
+      m.visible = roofOp > 0.01 || m.castShadow;
     }
     this.causticUniforms.uTime.value = this.time;
     if (this.grass.userData.uniforms) this.grass.userData.uniforms.uTime.value = this.time;

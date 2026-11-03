@@ -1,6 +1,6 @@
 // オフライン対応のサービスワーカー
 // ゲームを更新したら VERSION を上げること（古いキャッシュが入れ替わる）
-const VERSION = 'sumo-club-v8';
+const VERSION = 'sumo-club-v9';
 const FONT_CACHE = 'sumo-club-fonts';
 const ASSETS = [
   './',
