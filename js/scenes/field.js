@@ -15,13 +15,13 @@ const FLIPS = 10;
 // 高さで2種類の地面をブレンドするマテリアル
 function splatMaterial(low, high, { scaleLow = 0.25, scaleHigh = 0.2, blendY = 0.4, wetY = 0.15, noiseSeed = 5 } = {}) {
   const mat = new THREE.MeshStandardMaterial({ map: low.map, normalMap: low.normalMap, roughness: 1 });
-  const u = { uHigh: { value: high.map }, uHighN: { value: high.normalMap }, uLowS: { value: scaleLow }, uHighS: { value: scaleHigh }, uBlendY: { value: blendY }, uWetY: { value: wetY }, uTide: { value: 0 } };
+  const u = { uHigh: { value: high.map }, uHighN: { value: high.normalMap }, uLowS: { value: scaleLow }, uHighS: { value: scaleHigh }, uBlendY: { value: blendY }, uWetY: { value: wetY }, uTide: { value: 0 }, uTime: { value: 0 }, uFoam: { value: 0 } };
   mat.userData.uniforms = u;
   mat.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, u);
     sh.vertexShader = 'varying vec3 vWP;\n' + sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\n vWP = (modelMatrix * vec4(transformed,1.0)).xyz;');
     sh.fragmentShader = `varying vec3 vWP;
-      uniform sampler2D uHigh; uniform sampler2D uHighN; uniform float uLowS; uniform float uHighS; uniform float uBlendY; uniform float uWetY; uniform float uTide;
+      uniform sampler2D uHigh; uniform sampler2D uHighN; uniform float uLowS; uniform float uHighS; uniform float uBlendY; uniform float uWetY; uniform float uTide; uniform float uTime; uniform float uFoam;
       float hsh(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
       float vn(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f); return mix(mix(hsh(i),hsh(i+vec2(1,0)),f.x), mix(hsh(i+vec2(0,1)),hsh(i+vec2(1,1)),f.x), f.y); }
       float blendF;
@@ -30,13 +30,23 @@ function splatMaterial(low, high, { scaleLow = 0.25, scaleHigh = 0.2, blendY = 0
       .replace('#include <map_fragment>', `
         float nn = vn(vWP.xz * 0.35) * 0.6 + vn(vWP.xz * 1.3) * 0.3;
         blendF = smoothstep(uBlendY - 0.25, uBlendY + 0.25, vWP.y + (nn - 0.45) * 0.6);
-        wetF = 1.0 - smoothstep(uWetY - 0.1 + uTide, uWetY + 0.35 + uTide, vWP.y);
+        wetF = 1.0 - smoothstep(uWetY - 0.1 + uFoam * 0.1, uWetY + 0.35 + uFoam * 0.1, vWP.y);
         vec4 cLow = texture2D(map, vWP.xz * uLowS);
         vec4 cHigh = texture2D(uHigh, vWP.xz * uHighS);
         vec4 sampledDiffuseColor = mix(cLow, cHigh, blendF);
         float macro = vn(vWP.xz * 0.08) * 0.5 + vn(vWP.xz * 0.23) * 0.5;
         sampledDiffuseColor.rgb *= 0.78 + macro * 0.44;
         sampledDiffuseColor.rgb *= mix(1.0, 0.6, wetF);
+        // 波打ち際：寄せては返す薄い水と泡（水面そのものは動かさない）
+        if (uFoam > 0.5) {
+          float edge = uTide + (vn(vWP.xz * 0.6 + vec2(uTime * 0.15, 0.0)) - 0.5) * 0.05;
+          float wash = smoothstep(edge + 0.012, edge - 0.02, vWP.y) * smoothstep(-0.03, 0.01, vWP.y);
+          sampledDiffuseColor.rgb = mix(sampledDiffuseColor.rgb, sampledDiffuseColor.rgb * vec3(0.55, 0.68, 0.72), wash * 0.7);
+          float line = 1.0 - smoothstep(0.0, 0.03, abs(vWP.y - edge));
+          float bub = smoothstep(0.42, 0.7, vn(vWP.xz * 7.0 + vec2(uTime * 0.4, -uTime * 0.3)) * 0.7 + vn(vWP.xz * 19.0) * 0.4);
+          sampledDiffuseColor.rgb = mix(sampledDiffuseColor.rgb, vec3(0.92, 0.95, 0.95), line * bub * 0.85 * smoothstep(-0.03, 0.01, vWP.y));
+          wetF = max(wetF, wash);
+        }
         diffuseColor *= sampledDiffuseColor;
       `)
       .replace('#include <roughnessmap_fragment>', `float roughnessFactor = mix(0.92, 0.28, wetF);`)
@@ -163,6 +173,7 @@ export class FieldScene {
     };
     const rockG = groundTextures('shore'), sand = groundTextures('sand');
     const mat = splatMaterial(rockG, sand, { scaleLow: 0.07, scaleHigh: 0.18, blendY: 1.2, wetY: 0.3 });
+    mat.userData.uniforms.uFoam.value = 1;
     this.groundMat = mat;
     const g = new THREE.Mesh(terrain(90, 70, 180, 140, this.height), mat);
     g.receiveShadow = true;
@@ -205,14 +216,14 @@ export class FieldScene {
   addWater(geo, atten, dist, place) {
     const wn = waterNormal(512, this.loc === 'sea' ? 85 : 81);
     const wn2 = waterNormal(512, 86);
-    const rep = this.loc === 'sea' ? 0.06 : 0.12;
+    const rep = this.loc === 'sea' ? 0.035 : 0.12;
     wn.repeat.set(geo.parameters.width * rep, geo.parameters.height * rep);
     wn2.repeat.set(geo.parameters.width * rep * 1.6, geo.parameters.height * rep * 1.6);
     const mat = new THREE.MeshPhysicalMaterial({
-      color: '#ffffff', transmission: 1, roughness: 0.04, metalness: 0, ior: 1.33, thickness: this.loc === 'sea' ? 3 : 1.4,
+      color: '#ffffff', transmission: 1, roughness: this.loc === 'sea' ? 0.09 : 0.04, metalness: 0, ior: 1.33, thickness: this.loc === 'sea' ? 0.9 : 1.4,
       attenuationColor: new THREE.Color(atten), attenuationDistance: dist,
-      normalMap: wn, normalScale: new THREE.Vector2(0.35, 0.35),
-      clearcoat: 1, clearcoatRoughness: 0.05, clearcoatNormalMap: wn2, clearcoatNormalScale: new THREE.Vector2(0.3, 0.3),
+      normalMap: wn, normalScale: this.loc === 'sea' ? new THREE.Vector2(0.16, 0.16) : new THREE.Vector2(0.35, 0.35),
+      clearcoat: 1, clearcoatRoughness: this.loc === 'sea' ? 0.16 : 0.05, clearcoatNormalMap: wn2, clearcoatNormalScale: this.loc === 'sea' ? new THREE.Vector2(0.18, 0.18) : new THREE.Vector2(0.3, 0.3),
       specularIntensity: 1, envMapIntensity: 1.1,
     });
     const m = new THREE.Mesh(geo, mat);
@@ -695,14 +706,21 @@ export class FieldScene {
       this.camera.position.y += (Math.random() - 0.5) * this.shake * 0.6;
     }
     if (this.wn) {
-      const sp = this.loc === 'river' ? 0.06 : 0.012;
-      this.wn.offset.set(this.time * sp, this.time * 0.004);
-      this.wn2.offset.set(this.time * sp * 0.7, -this.time * 0.006);
+      if (this.loc === 'river') {
+        this.wn.offset.set(this.time * 0.06, this.time * 0.004);
+        this.wn2.offset.set(this.time * 0.042, -this.time * 0.006);
+      } else {
+        // うねりは2方向へゆっくり（水面の高さは動かさない）
+        this.wn.offset.set(this.time * 0.006, this.time * 0.009);
+        this.wn2.offset.set(-this.time * 0.008, this.time * 0.005);
+      }
     }
-    if (this.loc === 'sea' && this.water) {
-      const tide = Math.sin(this.time * 0.7) * 0.07;
-      this.water.position.y = tide;
-      this.groundMat.userData.uniforms.uTide.value = tide;
+    if (this.loc === 'sea') {
+      // 寄せては返す波打ち際（地面の表現だけで動かす）
+      const u = this.groundMat.userData.uniforms;
+      const t = this.time;
+      u.uTide.value = 0.03 + Math.max(0, Math.sin(t * 0.55)) * 0.07 + Math.sin(t * 1.1 + 1) * 0.01;
+      u.uTime.value = t;
     }
     if (this.grass?.userData.uniforms) this.grass.userData.uniforms.uTime.value = this.time;
     // 石アニメ
