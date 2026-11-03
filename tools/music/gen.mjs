@@ -36,7 +36,7 @@ const save = (file, song) => { writeFileSync(join(OUT, file), JSON.stringify(son
   const guitar = [], keys = [], bass = [];
   for (const [t, d, b, v] of prog) {
     const seq = [v[0], v[1], v[2], v[3], v[2], v[1], v[2], v[3]];
-    for (let k = 0; k < d * 2; k++) guitar.push(N(t + k * 0.5, k === 0 ? tr(b, 12) : seq[k % 8], k === 0 ? d : 0.9, k % 2 ? 0.42 : 0.55));
+    for (let k = 0; k < d * 2; k++) guitar.push(N(t + k * 0.5, k === 0 ? tr(b, 12) : seq[k % 8], k === 0 ? 1.5 : 0.9, k === 0 ? 0.4 : k % 2 ? 0.42 : 0.55));
     keys.push(...v.slice(1).map((n) => N(t, tr(n, 12), d - 0.05, 0.3)));
     bass.push(N(t, b, d >= 4 ? 1.5 : 1.2, 0.72));
     if (d >= 4) { bass.push(N(t + 2.5, b, 0.5, 0.5)); bass.push(N(t + 3, tr(b, 7), 0.9, 0.6)); }
@@ -70,13 +70,13 @@ const save = (file, song) => { writeFileSync(join(OUT, file), JSON.stringify(son
     sends: { reverb: { size: 1.1, decay: 2.2, damp: 6500, predelay: 0.02 }, delay: { time: '1/8d', feedback: 0.3, tone: 4000 } },
     master: { loudness: -18, ceiling: -1 },
     tracks: [
-      { id: 'gtr', name: 'ナイロンギター', inst: 'nylon', volume: -3, pan: -0.25, sends: { reverb: 0.2 }, humanize: { time: 0.008, vel: 0.06 }, swing: 0.12, clips: [{ at: 0, notes: guitar }] },
+      { id: 'gtr', name: 'ナイロンギター', inst: 'nylon', volume: -3, pan: -0.25, sends: { reverb: 0.2 }, fx: [{ type: 'eq', bands: [{ type: 'hp', freq: 140 }, { type: 'lowshelf', freq: 250, gain: -3 }] }], humanize: { time: 0.008, vel: 0.06 }, swing: 0.12, clips: [{ at: 0, notes: guitar }] },
       { id: 'keys', name: 'エレピ', inst: 'epiano', volume: -12, pan: 0.2, sends: { reverb: 0.25 }, clips: [{ at: 0, notes: keys }] },
-      { id: 'bass', name: 'ベース', inst: 'ebass', volume: -4, clips: [{ at: 0, notes: bass }] },
+      { id: 'bass', name: 'ベース', inst: 'ebass', volume: -13, fx: [{ type: 'eq', bands: [{ type: 'lowshelf', freq: 120, gain: -3 }] }], clips: [{ at: 0, notes: bass }] },
       { id: 'vib', name: 'ビブラフォン', inst: 'vibraphone', volume: -2, pan: 0.1, sends: { reverb: 0.3, delay: 0.12 }, humanize: { time: 0.006, vel: 0.05 }, clips: [{ at: 0, notes: vib }] },
       { id: 'fl', name: 'フルート', inst: 'flute', volume: -5, pan: -0.05, sends: { reverb: 0.3, delay: 0.1 }, clips: [{ at: 0, notes: flute }] },
       { id: 'furin', name: '風鈴', inst: 'glock', volume: -14, pan: 0.6, sends: { reverb: 0.6 }, clips: [{ at: 0, notes: furin }] },
-      { id: 'drums', name: 'ドラム', type: 'drums', kit: 'lofi', volume: -9, swing: 0.12, humanize: { time: 0.006, vel: 0.08 }, clips: [{ at: 0, len: 4, grid: kit, repeat: 16 }] },
+      { id: 'drums', name: 'ドラム', type: 'drums', kit: 'lofi', volume: -12, swing: 0.12, humanize: { time: 0.006, vel: 0.08 }, clips: [{ at: 0, len: 4, grid: kit, repeat: 16 }] },
     ],
   });
 }
