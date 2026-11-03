@@ -143,6 +143,7 @@ body.in-sumo #toast { top: auto; bottom: calc(180px + var(--safe-b)); }
 #title.hide { opacity: 0; pointer-events: none; }
 .title-inner { text-align: center; color: #fff; }
 #title h1 { font-family: 'Yuji Syuku', serif; font-weight: 400; font-size: clamp(64px, 16vw, 150px); margin: 0 0 10px; letter-spacing: 0.08em; text-shadow: 0 0 2px #000, 0 6px 0 #6a2010, 0 10px 40px rgba(0, 0, 0, 0.6); }
+.title-icon { width: 96px; height: 96px; border-radius: 22px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4); margin-bottom: 8px; }
 .title-sub { font-weight: 900; letter-spacing: 0.4em; font-size: clamp(14px, 3vw, 20px); text-shadow: 0 2px 6px #000; }
 .title-btns { display: flex; gap: 12px; justify-content: center; align-items: center; flex-wrap: wrap; }
 .title-note { margin-top: 20px; font-weight: 700; text-shadow: 0 2px 6px #000; padding: 0 16px; }

@@ -131,6 +131,13 @@ async function boot() {
   });
 }
 
+// PWA：オフラインで遊べるようにサービスワーカーを登録
+if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch((e) => console.warn('SW登録に失敗', e));
+  });
+}
+
 boot().catch((e) => {
   console.error(e);
   document.getElementById('loading').innerHTML = '<p style="padding:20px">読み込みに失敗しました。<br>WebGLに対応したブラウザで開いてください。<br><small>' + String(e && e.message || e) + '</small></p>';

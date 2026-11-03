@@ -292,7 +292,7 @@ export function groundTextures(kind = 'gravel', size = 512) {
       const i = y * size + x;
       let c, hv, rv;
       if (kind === 'gravel' || kind === 'tank') {
-        const cell = cellNoise(u, v, kind === 'tank' ? 22 : 18, 70);
+        const cell = cellNoise(u, v, kind === 'tank' ? 15 : 18, 70);
         const pr = mulberry32(cell.id * 7919 + 13)();
         const pr2 = mulberry32(cell.id * 104729 + 3)();
         const stone = clamp01((cell.f2 - cell.f1) * 6);
@@ -563,7 +563,7 @@ export function causticsTexture() {
     for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
       const u = x / size, v = y / size;
       const cell = cellNoise(u, v, 7, 501);
-      const e = Math.pow(clamp01(1 - (cell.f2 - cell.f1) * 5), 4);
+      const e = Math.pow(clamp01(1 - (cell.f2 - cell.f1) * 3.2), 2.5);
       const i = (y * size + x) * 4;
       img.data[i] = img.data[i + 1] = img.data[i + 2] = e * 255;
       img.data[i + 3] = 255;

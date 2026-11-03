@@ -20,7 +20,7 @@ export class TankScene {
     const state = app.state;
     const scene = new THREE.Scene();
     this.scene = scene;
-    this.camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.05, 6000);
+    this.camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.2, 6000);
     this.camera.position.set(0, 4.2, 10.5);
     this.time = 0;
     this.outdoor = new Outdoor(app.renderer, scene, state.slot, { shadowSize: 9, fogNear: 40, fogFar: 380 });
@@ -141,16 +141,16 @@ export class TankScene {
     this.floorY = (x, z) => 0.32 + (-z / TD) * 0.25 + (n.fbm(x / TW + 0.5, z / TD + 0.5, 3, 3) - 0.5) * 0.15;
     const gravelGeo = terrain(TW - 0.02, TD - 0.02, 60, 32, this.floorY);
     const caustic = causticsTexture();
-    this.causticUniforms = { uTime: { value: 0 }, uCaustic: { value: caustic }, uStrength: { value: night ? 0.5 : 1.4 } };
-    const gravelMat = new THREE.MeshStandardMaterial({ map: gt.map, normalMap: gt.normalMap, roughnessMap: gt.roughnessMap, roughness: 1 });
+    this.causticUniforms = { uTime: { value: 0 }, uCaustic: { value: caustic }, uStrength: { value: night ? 0.25 : 0.55 } };
+    const gravelMat = new THREE.MeshStandardMaterial({ map: gt.map, normalMap: gt.normalMap, normalScale: new THREE.Vector2(0.45, 0.45), roughnessMap: gt.roughnessMap, roughness: 1 });
     const cu = this.causticUniforms;
     gravelMat.onBeforeCompile = (sh) => {
       Object.assign(sh.uniforms, cu);
       sh.vertexShader = 'varying vec3 vWP;\n' + sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\n vWP = (modelMatrix * vec4(transformed,1.0)).xyz;');
       sh.fragmentShader = 'varying vec3 vWP;\nuniform float uTime; uniform sampler2D uCaustic; uniform float uStrength;\n' + sh.fragmentShader.replace('#include <opaque_fragment>', `
-        float c1 = texture2D(uCaustic, vWP.xz * 0.32 + vec2(uTime * 0.03, uTime * 0.02)).r;
-        float c2 = texture2D(uCaustic, vWP.xz * 0.27 + vec2(-uTime * 0.025, uTime * 0.031) + 0.37).r;
-        float cs = min(c1, c2) * 2.2 + pow(c1 * c2, 1.5);
+        float c1 = texture2D(uCaustic, vWP.xz * 0.22 + vec2(uTime * 0.012, uTime * 0.008)).r;
+        float c2 = texture2D(uCaustic, vWP.xz * 0.19 + vec2(-uTime * 0.01, uTime * 0.013) + 0.37).r;
+        float cs = smoothstep(0.05, 0.9, min(c1, c2)) * 1.6;
         outgoingLight += diffuseColor.rgb * cs * uStrength;
         #include <opaque_fragment>`);
     };
@@ -160,7 +160,7 @@ export class TankScene {
     // 底砂の側面（ガラス越しに見える断面）
     const sideMat = new THREE.MeshStandardMaterial({ map: gt.map, roughness: 1, color: '#d8cfc0' });
     const front = new THREE.Mesh(new THREE.PlaneGeometry(TW - 0.02, 0.4), sideMat);
-    front.position.set(0, 0.2, TD / 2 - 0.02);
+    front.position.set(0, 0.2, TD / 2 - 0.06); // 水の前面(TD/2-0.02)と重ならない位置
     tank.add(front);
 
     // 岩組（陸地）
@@ -199,7 +199,12 @@ export class TankScene {
       attenuationColor: new THREE.Color('#9ccfc0'), attenuationDistance: 5.5, normalMap: wn, normalScale: new THREE.Vector2(0.15, 0.15),
       specularIntensity: 1, envMapIntensity: 1,
     });
-    const water = new THREE.Mesh(new THREE.BoxGeometry(TW - 0.04, WATER, TD - 0.04), waterMat);
+    waterMat.normalScale.set(0.08, 0.08);
+    const waterSideMat = waterMat.clone();
+    waterSideMat.normalMap = null;
+    // BoxGeometry の面順: +x, -x, +y(水面), -y, +z, -z
+    const water = new THREE.Mesh(new THREE.BoxGeometry(TW - 0.04, WATER, TD - 0.04),
+      [waterSideMat, waterSideMat, waterMat, waterSideMat, waterSideMat, waterSideMat]);
     water.position.y = WATER / 2 + 0.01;
     tank.add(water);
     this.water = water;
