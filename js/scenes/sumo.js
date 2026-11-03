@@ -739,7 +739,7 @@ export class SumoScene {
     if (this.rival && playerWon && !s.beaten[this.rival.id]) {
       s.beaten[this.rival.id] = true;
       const rw = this.rival.reward;
-      if (rw?.tank) { s.capacity += rw.tank; rewardMsg = `水槽が広くなった！（${s.capacity}匹まで飼える）`; }
+      if (rw?.tank) { s.capacity += rw.tank; rewardMsg = `水槽が ${60 + (Math.min(10, s.capacity) - 5) * 10}cm に大きくなった！（${s.capacity}匹まで飼える）`; }
       if (rw?.trap) { s.trapCount += rw.trap; rewardMsg = `カニカゴをもらった！（カゴ ${s.trapCount}個）`; }
       if (rw?.title) { s.title = rw.title; rewardMsg = `称号「${rw.title}」を手に入れた！`; }
     }

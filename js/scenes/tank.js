@@ -21,17 +21,29 @@ function howToCatch(id) {
   return ways.join('・');
 }
 
-const TW = 6, TH = 3.6, TD = 3.2, WATER = 1.9;
+// 水槽の大きさ（1単位=10cm）。飼える数（capacity）が増えると水槽も大きくなる
+let TW = 6, TH = 3.6, TD = 3.2, WATER = 1.9, SX = 1, SZ = 1, CAM = 1;
+function setTankSize(capacity) {
+  const k = Math.max(0, Math.min(5, capacity - 5));
+  TW = 6 + k * 1.0;          // 60cm → 90cm（8匹）
+  TD = 3.2 + k * 0.25;
+  TH = 3.6 + k * 0.2;
+  WATER = 1.9 + k * 0.1;
+  SX = TW / 6; SZ = TD / 3.2;
+  CAM = 1 + k * 0.12;
+}
+export function tankLabel(capacity) { setTankSize(capacity); return `${Math.round(TW * 10)}cm水槽`; }
 
 export class TankScene {
   constructor(app, opts = {}) {
     this.app = app;
     this.titleMode = !!opts.titleMode;
     const state = app.state;
+    setTankSize(state.capacity);
     const scene = new THREE.Scene();
     this.scene = scene;
     this.camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.2, 6000);
-    this.camera.position.set(0, 4.2, 10.5);
+    this.camera.position.set(0, 4.2 * CAM, 10.5 * CAM);
     this.time = 0;
     this.outdoor = new Outdoor(app.renderer, scene, state.slot, { shadowSize: 9, fogNear: 40, fogFar: 380 });
     this.outdoor.sunLight.target.position.set(0, 0, 0);
@@ -41,7 +53,7 @@ export class TankScene {
     this.controls.target.set(0, 1.4, 0);
     this.controls.enableDamping = true;
     this.controls.minDistance = 3.5;
-    this.controls.maxDistance = 16;
+    this.controls.maxDistance = 16 * CAM;
     this.controls.minPolarAngle = 0.12;
     this.controls.maxPolarAngle = 1.52;
     this.controls.minAzimuthAngle = -1.1;
@@ -190,14 +202,15 @@ export class TankScene {
     this.obstacles = [];
     for (const r of rocks) {
       const m = new THREE.Mesh(rockGeometry(r.seed, r.s, r.sy, r.s * 0.8, 3), rockMat);
-      m.position.set(r.x, this.floorY(r.x, r.z), r.z);
+      const rx = r.x * SX, rz = r.z * SZ;
+      m.position.set(rx, this.floorY(rx, rz), rz);
       m.castShadow = true; m.receiveShadow = true;
       tank.add(m);
-      this.obstacles.push({ x: r.x, z: r.z, r: r.s * 0.95 });
+      this.obstacles.push({ x: rx, z: rz, r: r.s * 0.95 });
     }
     // 水草
-    const plants = grassField(70, (r) => {
-      const x = 0.4 + r() * 2.2, z = -1.4 + r() * 0.5;
+    const plants = grassField(Math.round(70 * SX), (r) => {
+      const x = (0.4 + r() * 2.2) * SX, z = (-1.4 + r() * 0.5) * SZ;
       return { x, y: this.floorY(x, z), z, h: 0.8 + r() * 1.0 };
     }, { seed: 9, color: '#7fbf6a' });
     plants.scale.set(1, 1, 1);
@@ -247,10 +260,10 @@ export class TankScene {
     }
     // エアストーンと泡
     const stone = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.1, 12), new THREE.MeshStandardMaterial({ color: '#7a8a9a', roughness: 1 }));
-    stone.position.set(2.5, this.floorY(2.5, -1.3) + 0.05, -1.3);
+    stone.position.set(TW / 2 - 0.5, this.floorY(TW / 2 - 0.5, -TD / 2 + 0.3) + 0.05, -TD / 2 + 0.3);
     tank.add(stone);
     const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, TH, 6), new THREE.MeshPhysicalMaterial({ color: '#cfe8e0', transparent: true, opacity: 0.5, roughness: 0.1 }));
-    tube.position.set(2.75, TH / 2 + 0.2, -1.45);
+    tube.position.set(TW / 2 - 0.25, TH / 2 + 0.2, -TD / 2 + 0.15);
     tank.add(tube);
     const bubbleGeo = new THREE.SphereGeometry(0.04, 8, 6);
     const bubbleMat = new THREE.MeshPhysicalMaterial({ color: '#ffffff', transparent: true, opacity: 0.55, roughness: 0, metalness: 0.1, envMapIntensity: 2 });
@@ -300,7 +313,7 @@ export class TankScene {
   exitTitle() {
     this.titleMode = false;
     document.getElementById('hud').style.display = '';
-    this.camera.position.set(0, 4.2 + ((this.distMul || 1) - 1) * 2, 10.5 * (this.distMul || 1));
+    this.camera.position.set(0, (4.2 + ((this.distMul || 1) - 1) * 2) * CAM, 10.5 * (this.distMul || 1) * CAM);
     this.controls.update();
     this.showHub();
   }
@@ -309,7 +322,7 @@ export class TankScene {
     const s = this.app.state;
     const traps = s.traps.map((t) => (t.loc === 'river' ? '川' : '海')).join('・');
     return `<div class="date">${Save.dateLabel(s)}　${SLOTS[s.slot]}</div>
-      <div class="sub">水槽 ${s.crabs.length}/${s.capacity}匹 ・ カゴ ${s.trapCount - s.traps.length}/${s.trapCount}${traps ? `（${traps}に設置中）` : ''}${s.title ? ` ・ <b style="color:#c4282e">${s.title}</b>` : ''}</div>`;
+      <div class="sub">${tankLabel(s.capacity)} ${s.crabs.length}/${s.capacity}匹 ・ カゴ ${s.trapCount - s.traps.length}/${s.trapCount}${traps ? `（${traps}に設置中）` : ''}${s.title ? ` ・ <b style="color:#c4282e">${s.title}</b>` : ''}</div>`;
   }
 
   showHub() {
@@ -657,8 +670,8 @@ export class TankScene {
     const dm = Math.max(1, 1.5 / (w / h));
     if (dm !== this.distMul) {
       this.distMul = dm;
-      this.controls.maxDistance = 16 * dm;
-      this.camera.position.set(0, 4.2 + (dm - 1) * 2, 10.5 * dm);
+      this.controls.maxDistance = 16 * dm * CAM;
+      this.camera.position.set(0, (4.2 + (dm - 1) * 2) * CAM, 10.5 * dm * CAM);
       this.controls.update();
     }
     this.camera.aspect = w / h;
