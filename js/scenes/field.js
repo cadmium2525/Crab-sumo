@@ -12,18 +12,27 @@ import * as Audio from '../audio.js';
 
 const FLIPS = 10;
 
+// 波の周期（秒）。沖の波・波打ち際・波の音をこの周期で合わせる
+const WAVE_T = 5.5;
+const NOISE_GLSL = `
+      #define WAVE_T ${WAVE_T.toFixed(2)}
+      float hsh(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
+      float vn(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f); return mix(mix(hsh(i),hsh(i+vec2(1,0)),f.x), mix(hsh(i+vec2(0,1)),hsh(i+vec2(1,1)),f.x), f.y); }`;
+
 // 高さで2種類の地面をブレンドするマテリアル
-function splatMaterial(low, high, { scaleLow = 0.25, scaleHigh = 0.2, blendY = 0.4, wetY = 0.15, noiseSeed = 5 } = {}) {
+function splatMaterial(low, high, opts = {}) {
+  const { scaleLow = 0.25, scaleHigh = 0.2, blendY = 0.4, wetY = 0.15 } = opts;
   const mat = new THREE.MeshStandardMaterial({ map: low.map, normalMap: low.normalMap, roughness: 1 });
-  const u = { uHigh: { value: high.map }, uHighN: { value: high.normalMap }, uLowS: { value: scaleLow }, uHighS: { value: scaleHigh }, uBlendY: { value: blendY }, uWetY: { value: wetY }, uTide: { value: 0 }, uTime: { value: 0 }, uFoam: { value: 0 } };
+  const u = { uHigh: { value: high.map }, uHighN: { value: high.normalMap }, uLowS: { value: scaleLow }, uHighS: { value: scaleHigh }, uBlendY: { value: blendY }, uWetY: { value: wetY }, uTide: { value: 0 }, uTime: { value: 0 }, uFoam: { value: 0 }, uFoamLight: { value: 1 }, uSeaTex: { value: null } };
   mat.userData.uniforms = u;
   mat.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, u);
     sh.vertexShader = 'varying vec3 vWP;\n' + sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\n vWP = (modelMatrix * vec4(transformed,1.0)).xyz;');
     sh.fragmentShader = `varying vec3 vWP;
-      uniform sampler2D uHigh; uniform sampler2D uHighN; uniform float uLowS; uniform float uHighS; uniform float uBlendY; uniform float uWetY; uniform float uTide; uniform float uTime; uniform float uFoam;
-      float hsh(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
-      float vn(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f); return mix(mix(hsh(i),hsh(i+vec2(1,0)),f.x), mix(hsh(i+vec2(0,1)),hsh(i+vec2(1,1)),f.x), f.y); }
+      uniform sampler2D uHigh; uniform sampler2D uHighN; uniform float uLowS; uniform float uHighS; uniform float uBlendY; uniform float uWetY; uniform float uTide; uniform float uTime; uniform float uFoam; uniform float uFoamLight;
+      ${NOISE_GLSL}
+      uniform sampler2D uSeaTex;
+      ${opts.seaMapGLSL || 'vec4 seaMap(vec2 xz) { return vec4(0.0, 0.0, 1.0, 1.0); }'}
       float blendF;
       float wetF;
       ` + sh.fragmentShader
@@ -37,15 +46,32 @@ function splatMaterial(low, high, { scaleLow = 0.25, scaleHigh = 0.2, blendY = 0
         float macro = vn(vWP.xz * 0.08) * 0.5 + vn(vWP.xz * 0.23) * 0.5;
         sampledDiffuseColor.rgb *= 0.78 + macro * 0.44;
         sampledDiffuseColor.rgb *= mix(1.0, 0.6, wetF);
-        // 波打ち際：寄せては返す薄い水と泡（水面そのものは動かさない）
+        // 波打ち際：沖から来た波が砂浜を駆け上がり、引いていく（水面そのものは動かさない）
         if (uFoam > 0.5) {
-          float edge = uTide + (vn(vWP.xz * 0.6 + vec2(uTime * 0.15, 0.0)) - 0.5) * 0.05;
-          float wash = smoothstep(edge + 0.012, edge - 0.02, vWP.y) * smoothstep(-0.03, 0.01, vWP.y);
-          sampledDiffuseColor.rgb = mix(sampledDiffuseColor.rgb, sampledDiffuseColor.rgb * vec3(0.55, 0.68, 0.72), wash * 0.7);
-          float line = 1.0 - smoothstep(0.0, 0.03, abs(vWP.y - edge));
-          float bub = smoothstep(0.42, 0.7, vn(vWP.xz * 7.0 + vec2(uTime * 0.4, -uTime * 0.3)) * 0.7 + vn(vWP.xz * 19.0) * 0.4);
-          sampledDiffuseColor.rgb = mix(sampledDiffuseColor.rgb, vec3(0.92, 0.95, 0.95), line * bub * 0.85 * smoothstep(-0.03, 0.01, vWP.y));
-          wetF = max(wetF, wash);
+          float cyc = uTime / WAVE_T;
+          float w = fract(cyc);
+          float id = floor(cyc);
+          float land = smoothstep(-0.05, 0.0, vWP.y) * seaMap(vWP.xz).z;
+          // 波ごと・場所ごとに駆け上がる高さが違う
+          float R = 0.08 + 0.07 * vn(vec2(vWP.x * 0.11 + id * 3.7, id * 1.31));
+          float up = w < 0.2 ? sin(w / 0.2 * 1.5708) : 1.0 - smoothstep(0.2, 0.96, w);
+          float H = R * up - 0.012 + (vn(vWP.xz * 0.8 + id) - 0.5) * 0.025;
+          float sheet = smoothstep(H + 0.005, H - 0.012, vWP.y) * land;
+          float thin = smoothstep(H, H - 0.05, vWP.y);
+          // 水の膜（先端ほど薄い）
+          sampledDiffuseColor.rgb = mix(sampledDiffuseColor.rgb, sampledDiffuseColor.rgb * vec3(0.5, 0.63, 0.7), sheet * (0.45 + thin * 0.35));
+          // 泡：先端のふちと、引き波に残るレース模様
+          float n1 = vn(vWP.xz * 5.0 + vec2(uTime * 0.25, -uTime * 0.1));
+          float n2 = vn(vWP.xz * 15.0 - vec2(uTime * 0.15, 0.0));
+          float lace = smoothstep(0.5, 0.78, n1 * 0.65 + n2 * 0.45);
+          float front = exp(-abs(vWP.y - H) / 0.011) * land * (w < 0.22 ? 1.0 : 0.7 * (1.0 - smoothstep(0.22, 0.9, w)));
+          float trail = sheet * lace * (1.0 - smoothstep(0.15, 0.85, w)) * 0.6;
+          float foam = clamp(front * (0.5 + lace * 0.7) + trail, 0.0, 1.0);
+          sampledDiffuseColor.rgb = mix(sampledDiffuseColor.rgb, vec3(0.93, 0.96, 0.96) * uFoamLight, foam * 0.92);
+          // 波が届いたところまで濡れて光る
+          float reach = 0.155 + (vn(vWP.xz * 0.5) - 0.5) * 0.03;
+          wetF = max(wetF, smoothstep(reach + 0.03, reach - 0.03, vWP.y) * land * 0.8);
+          wetF = max(wetF, sheet);
         }
         diffuseColor *= sampledDiffuseColor;
       `)
@@ -172,8 +198,11 @@ export class FieldScene {
       return y;
     };
     const rockG = groundTextures('shore'), sand = groundTextures('sand');
-    const mat = splatMaterial(rockG, sand, { scaleLow: 0.07, scaleHigh: 0.18, blendY: 1.2, wetY: 0.3 });
+    this.bakeSeaMap();
+    const mat = splatMaterial(rockG, sand, { scaleLow: 0.07, scaleHigh: 0.18, blendY: 1.2, wetY: 0.3, seaMapGLSL: this.seaMapGLSL });
     mat.userData.uniforms.uFoam.value = 1;
+    mat.userData.uniforms.uSeaTex.value = this.seaTex;
+    mat.userData.uniforms.uFoamLight.value = [0.95, 1, 0.8, 0.18][this.slot];
     this.groundMat = mat;
     const g = new THREE.Mesh(terrain(90, 70, 180, 140, this.height), mat);
     g.receiveShadow = true;
@@ -226,12 +255,119 @@ export class FieldScene {
       clearcoat: 1, clearcoatRoughness: this.loc === 'sea' ? 0.16 : 0.05, clearcoatNormalMap: wn2, clearcoatNormalScale: this.loc === 'sea' ? new THREE.Vector2(0.18, 0.18) : new THREE.Vector2(0.3, 0.3),
       specularIntensity: 1, envMapIntensity: 1.1,
     });
+    if (this.loc === 'sea') this.addSurf(mat);
     const m = new THREE.Mesh(geo, mat);
     m.rotation.x = -Math.PI / 2;
     place(m);
     this.scene.add(m);
     this.water = m;
     this.wn = wn; this.wn2 = wn2;
+  }
+
+  // 海の波：地形の高さを地図（テクスチャ）にして、深さに応じて波を動かす
+  // 海の地図：R=高さ、G=外海につながる水、B=外海の近く（潮だまりには波を立てない）
+  bakeSeaMap() {
+    const W = 256, Hh = 200, X0 = -45, Z0 = -35, SX = 90, SZ = 70;
+    const h = new Float32Array(W * Hh);
+    for (let j = 0; j < Hh; j++) for (let i = 0; i < W; i++) h[j * W + i] = this.height(X0 + (i + 0.5) / W * SX, Z0 + (j + 0.5) / Hh * SZ);
+    const open = new Uint8Array(W * Hh);
+    const q = [];
+    for (let i = 0; i < W; i++) if (h[i] < 0) { open[i] = 1; q.push(i); }
+    while (q.length) {
+      const k = q.pop(), i = k % W, j = (k / W) | 0;
+      for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const ni = i + di, nj = j + dj;
+        if (ni < 0 || nj < 0 || ni >= W || nj >= Hh) continue;
+        const nk = nj * W + ni;
+        if (!open[nk] && h[nk] < 0) { open[nk] = 1; q.push(nk); }
+      }
+    }
+    // 外海から少し陸へ広げた範囲（波が駆け上がれる場所）
+    const near = new Float32Array(W * Hh);
+    const R = 7;
+    for (let j = 0; j < Hh; j++) for (let i = 0; i < W; i++) {
+      let best = 0;
+      for (let dj = -R; dj <= R && best < 1; dj++) for (let di = -R; di <= R; di++) {
+        const ni = i + di, nj = j + dj;
+        if (ni < 0 || nj < 0 || ni >= W || nj >= Hh || !open[nj * W + ni]) continue;
+        best = Math.max(best, 1 - Math.hypot(di, dj) / (R + 1));
+      }
+      near[j * W + i] = Math.min(1, best * 2);
+    }
+    const data = new Uint8Array(W * Hh * 4);
+    for (let k = 0; k < W * Hh; k++) {
+      data[k * 4] = Math.round(Math.max(0, Math.min(1, (h[k] + 6) / 8)) * 255);
+      data[k * 4 + 1] = open[k] ? 255 : 0;
+      data[k * 4 + 2] = Math.round(near[k] * 255);
+      data[k * 4 + 3] = 255;
+    }
+    const tex = new THREE.DataTexture(data, W, Hh);
+    tex.magFilter = tex.minFilter = THREE.LinearFilter;
+    tex.needsUpdate = true;
+    this.seaTex = tex;
+    this.seaMapGLSL = `
+        vec4 seaMap(vec2 xz) {
+          vec2 uv = (xz - vec2(${X0.toFixed(1)}, ${Z0.toFixed(1)})) / vec2(${SX.toFixed(1)}, ${SZ.toFixed(1)});
+          vec4 m = texture2D(uSeaTex, clamp(uv, 0.0, 1.0));
+          return vec4(m.r * 8.0 - 6.0, m.g, m.b, 1.0);
+        }`;
+    return tex;
+  }
+
+  addSurf(mat) {
+    const tex = this.seaTex;
+    const foamLight = [0.95, 1, 0.8, 0.18][this.slot];
+    this.surfU = { uTime: { value: 0 }, uSeaTex: { value: tex }, uFoamLight: { value: foamLight } };
+    const su = this.surfU;
+    mat.onBeforeCompile = (sh) => {
+      Object.assign(sh.uniforms, su);
+      sh.vertexShader = 'varying vec3 vWP;\n' + sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\n vWP = (modelMatrix * vec4(transformed,1.0)).xyz;');
+      sh.fragmentShader = `varying vec3 vWP;
+        uniform float uTime; uniform sampler2D uSeaTex; uniform float uFoamLight;
+        ${NOISE_GLSL}
+        ${this.seaMapGLSL}
+        ` + sh.fragmentShader
+        .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+          {
+            // 岸へ向かって進むうねり（浅くなるほど高く、波長が短く）
+            vec4 sm = seaMap(vWP.xz);
+            float d = -sm.x;
+            float ph = uTime / WAVE_T + d * 1.15;
+            float fadeX = 1.0 - smoothstep(40.0, 60.0, abs(vWP.x));
+            float amp = smoothstep(5.0, 0.6, d) * smoothstep(-0.05, 0.15, d) * fadeX * sm.y;
+            float sw = (sin(6.2832 * ph) * 0.6 + sin(12.566 * ph) * 0.2) * 0.22 * amp;
+            normal = normalize(normal + (viewMatrix * vec4(0.0, 0.0, sw, 0.0)).xyz);
+          }`)
+        .replace('#include <opaque_fragment>', `
+          {
+            vec4 sm = seaMap(vWP.xz);
+            float d = -sm.x;
+            float ph = uTime / WAVE_T + d * 1.15;
+            float w = fract(ph);
+            float fadeX = (1.0 - smoothstep(40.0, 60.0, abs(vWP.x))) * sm.y;
+            float shoal = smoothstep(1.7, 0.2, d) * smoothstep(-0.03, 0.04, d) * fadeX;
+            float n1 = vn(vWP.xz * 1.1 + vec2(uTime * 0.12, 0.0));
+            float n2 = vn(vWP.xz * 4.5 - vec2(0.0, uTime * 0.3));
+            float n3 = vn(vWP.xz * 13.0 + uTime * 0.2);
+            float brk = smoothstep(1.0, 0.15, d);
+            // 波頭の白い筋（浅いほど太く、ちぎれにくい）
+            float crest = smoothstep(0.0, 0.02, w) * (1.0 - smoothstep(0.02, 0.06 + brk * 0.07, w));
+            // 平らな浅瀬で波頭がべったり広がらないよう、深さの変化がゆるい所では弱める
+            float perUnit = fwidth(ph) / max(length(fwidth(vWP.xz)), 1e-4);
+            crest *= smoothstep(0.03, 0.1, perUnit);
+            float foam = crest * smoothstep(0.42 - brk * 0.35, 0.8, n1 * 0.65 + n2 * 0.45) * shoal;
+            // 砕けたあとの泡のレース
+            float lace = smoothstep(0.64, 0.86, n2 * 0.55 + n3 * 0.5) * exp(-w * 3.2) * smoothstep(0.55, 0.0, d) * fadeX;
+            // 岸のふちの泡
+            float edge = smoothstep(0.07, 0.0, d) * smoothstep(0.35, 0.75, n2 * 0.6 + n3 * 0.4) * fadeX;
+            foam = clamp(foam + lace * 0.75 + edge * 0.7, 0.0, 1.0);
+            // 波の前面（盛り上がり）を少し濃く
+            float face = smoothstep(0.82, 1.0, w) * shoal * 0.18;
+            outgoingLight *= 1.0 - face;
+            outgoingLight = mix(outgoingLight, vec3(0.9, 0.94, 0.95) * uFoamLight, foam * 0.88);
+          }
+          #include <opaque_fragment>`);
+    };
   }
 
   addMountains(color) {
@@ -292,8 +428,18 @@ export class FieldScene {
       marker.rotation.x = -Math.PI / 2;
       marker.position.set(sp.x, 0.04, sp.z);
       this.scene.add(marker);
+      // 目印の竹ざおと赤い布（カゴを仕掛けられる場所）
+      const flag = new THREE.Group();
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 2.2, 8), new THREE.MeshStandardMaterial({ color: '#b8a060', roughness: 0.6 }));
+      pole.position.y = 1.1 + Math.min(0, y) * 0.5;
+      const cloth = new THREE.Mesh(new THREE.PlaneGeometry(0.55, 0.32), new THREE.MeshStandardMaterial({ color: '#d03a28', roughness: 0.8, side: THREE.DoubleSide }));
+      cloth.position.set(0.3, pole.position.y + 0.85, 0);
+      pole.castShadow = cloth.castShadow = true;
+      flag.add(pole, cloth);
+      flag.position.set(sp.x + 1.1, 0, sp.z - 0.2);
+      this.scene.add(flag);
       const trap = state.traps.find((t) => t.loc === this.loc && t.spot === i);
-      const o = { spot: i, x: sp.x, z: sp.z, bedY: y, marker, trap, group: null };
+      const o = { spot: i, x: sp.x, z: sp.z, bedY: y, marker, trap, group: null, cloth: flag.children[1] };
       if (trap) this.makeTrapObject(o);
       this.trapObjs.push(o);
     });
@@ -352,21 +498,28 @@ export class FieldScene {
       { label: '❔ あそびかた', onclick: () => this.help() },
     ]);
     bigText(this.loc === 'river' ? '川' : '海', { ms: 1200, cls: 'small' });
-    setTimeout(() => toast('石をタップしてひっくり返そう。白い輪はカゴ罠の場所', 3500), 900);
+    if (!this.app.state.fieldTipSeen) {
+      this.app.state.fieldTipSeen = true;
+      this.app.save();
+      setTimeout(() => this.help(true), 900);
+    } else setTimeout(() => toast('石をめくって手づかみ。赤い旗の輪にはカゴ罠を仕掛けられる', 3500), 900);
     // 罠の状態
     const ready = this.trapObjs.filter((o) => o.trap && Save.timeIndex(this.app.state) > o.trap.placedT);
     if (ready.length) setTimeout(() => toast('仕掛けたカゴを引き上げてみよう！（ブイをタップ）', 3500), 4600);
   }
 
-  help() {
+  help(first = false) {
     modal((b) => {
       b.appendChild(el('div', { class: 'help', html: `
+        <p><b>カニのとり方は2つ。どちらも最初から使えます。</b><br>
+        ・<b>手づかみ</b>（石をめくる）…小〜中くらいのカニ。${this.loc === 'sea' ? 'イソガニ・ヒライソガニ・ショウジンガニなど' : 'サワガニ・アカテガニ・ベンケイガニなど'}<br>
+        ・<b>カゴ罠</b>（赤い旗の白い輪）…石の下ではめったに見つからない大物が入りやすい。${this.loc === 'sea' ? 'ガザミ・タイワンガザミ・イシガニなど' : 'モクズガニ・ノコギリガザミなど'}</p>
         <p><b>手づかみ</b>：石をタップするとひっくり返せます。カニがいたら、<b>逃げている間</b>にタップしてつかまえよう。<br>
         ハサミを振り上げて<b>威嚇しているとき</b>に手を出すと、はさまれて逃げられやすい！</p>
-        <p><b>カゴ罠</b>：白い輪をタップしてエサを入れたカゴを沈めます。時間をおいてから（帰ったりひと休みしたあと）ブイをタップして引き上げよう。夜をまたぐと大物が入りやすい。</p>
+        <p><b>カゴ罠</b>：赤い旗の白い輪をタップしてエサを入れたカゴを沈めます。時間をおいてから（帰ったりひと休みしたあと）ブイをタップして引き上げよう。夜をまたぐと大物が入りやすい。</p>
         <p>石めくりは1回の外出で${FLIPS}回まで。帰ると時間が進みます。</p>
         <p>夜は懐中電灯で照らしながら探そう。夜にしか出てこないカニもいる。</p>` }));
-    }, { title: 'あそびかた' });
+    }, { title: first ? (this.loc === 'sea' ? '海でカニをとろう' : '川でカニをとろう') : 'あそびかた' });
   }
 
   updateHud() {
@@ -716,11 +869,11 @@ export class FieldScene {
       }
     }
     if (this.loc === 'sea') {
-      // 寄せては返す波打ち際（地面の表現だけで動かす）
-      const u = this.groundMat.userData.uniforms;
-      const t = this.time;
-      u.uTide.value = 0.03 + Math.max(0, Math.sin(t * 0.55)) * 0.07 + Math.sin(t * 1.1 + 1) * 0.01;
-      u.uTime.value = t;
+      // 波：沖の波（水面）と波打ち際（地面）を同じ時刻で動かす
+      this.groundMat.userData.uniforms.uTime.value = this.time;
+      if (this.surfU) this.surfU.uTime.value = this.time;
+      const cyc = Math.floor(this.time / WAVE_T);
+      if (cyc !== this.waveCycle) { if (this.waveCycle !== undefined) Audio.sfx('wave'); this.waveCycle = cyc; }
     }
     if (this.grass?.userData.uniforms) this.grass.userData.uniforms.uTime.value = this.time;
     // 石アニメ
@@ -738,6 +891,7 @@ export class FieldScene {
     }
     // 罠のアニメ
     for (const o of this.trapObjs) {
+      if (o.cloth) { o.cloth.rotation.y = Math.sin(this.time * 2.3 + o.x) * 0.35; o.marker.material.opacity = 0.35 + Math.sin(this.time * 2.5) * 0.15; }
       if (!o.group) continue;
       o.buoy.position.y = (this.water ? this.water.position.y : 0) + 0.12 + Math.sin(this.time * 1.8 + o.x) * 0.05;
       if (o.sinking) {

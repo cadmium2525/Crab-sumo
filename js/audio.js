@@ -89,6 +89,12 @@ export function sfx(name) {
     case 'win': [392, 523, 659, 784, 1046].forEach((f, i) => tone({ freq: f, d: 0.3, peak: 0.2, type: 'triangle', delay: i * 0.11 })); break;
     case 'lose': [392, 370, 330, 262].forEach((f, i) => tone({ freq: f, d: 0.35, peak: 0.18, type: 'triangle', delay: i * 0.18 })); break;
     case 'thud': tone({ freq: 90, freq2: 45, d: 0.3, peak: 0.7 }); burst({ freq: 400, d: 0.1, peak: 0.3, type: 'lowpass' }); break;
+    case 'wave':
+      // 砕けて砂浜をさーっと上がる波
+      burst({ freq: 900, q: 0.35, a: 0.35, d: 2.6, peak: 0.16 });
+      burst({ freq: 3200, q: 0.4, a: 0.5, d: 2.2, peak: 0.07, delay: 0.25 });
+      burst({ freq: 260, q: 0.5, a: 0.08, d: 0.9, peak: 0.14, type: 'lowpass' });
+      break;
     case 'crowd': burst({ freq: 900, q: 0.4, a: 0.1, d: 1.2, peak: 0.25 }); break;
   }
 }
@@ -115,8 +121,9 @@ export function ambient(kind) {
     add(noise(), (f) => { f.type = 'highpass'; f.frequency.value = 3000; }, 0.04, { f: 7, depth: 0.03 });
   }
   if (kind === 'sea') {
-    add(noise(), (f) => { f.type = 'lowpass'; f.frequency.value = 700; }, 0.2, { f: 0.12, depth: 0.17 });
-    add(noise(), (f) => { f.type = 'bandpass'; f.frequency.value = 2500; f.Q.value = 0.5; }, 0.03, { f: 0.12, depth: 0.03 });
+    // 遠くの波のざわめき（寄せる波そのものは sfx('wave') で鳴らす）
+    add(noise(), (f) => { f.type = 'lowpass'; f.frequency.value = 600; }, 0.1, { f: 0.07, depth: 0.04 });
+    add(noise(), (f) => { f.type = 'bandpass'; f.frequency.value = 2500; f.Q.value = 0.5; }, 0.015);
   }
 }
 

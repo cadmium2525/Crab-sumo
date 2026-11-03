@@ -4,12 +4,22 @@ import { OrbitControls } from 'three/addons/OrbitControls.js';
 import { Outdoor, rockGeometry, grassField, treeCluster, terrain } from '../env.js';
 import { plankTextures, groundTextures, rockTextures, waterNormal, causticsTexture, getNoise, mulberry32 } from '../textures.js';
 import { CrabModel } from '../crab.js';
-import { SPECIES, SPECIES_ORDER, RIVALS, rivalCrab, overallPower } from '../data.js';
+import { SPECIES, SPECIES_ORDER, RIVALS, SPAWN, rivalCrab, overallPower } from '../data.js';
 import { el, modal, toast, crabCard, setHud, setActions, confirmBox, promptBox, sayBox } from '../ui.js';
 import { SLOTS } from '../data.js';
 import * as Save from '../save.js';
 import * as Audio from '../audio.js';
 import { silhouetteThumb, crabThumbnail } from '../crab.js';
+
+// 図鑑用：その種がどの方法でとれるか
+function howToCatch(id) {
+  const ways = [];
+  for (const loc of Object.values(SPAWN)) {
+    if (loc.hand.some((x) => x.id === id) && !ways.includes('手づかみ')) ways.push('手づかみ');
+    if (loc.trap.some((x) => x.id === id) && !ways.includes('カゴ罠')) ways.push('カゴ罠');
+  }
+  return ways.join('・');
+}
 
 const TW = 6, TH = 3.6, TD = 3.2, WATER = 1.9;
 
@@ -479,6 +489,7 @@ export class TankScene {
               bb.appendChild(el('div', { class: 'kv', style: 'margin:10px 0' },
                 el('b', {}, '学名'), el('i', {}, sp.sci),
                 el('b', {}, 'すみか'), hab,
+                el('b', {}, 'とり方'), howToCatch(id),
                 el('b', {}, '甲幅'), `${sp.size[0]}〜${sp.size[1]}cm`,
                 el('b', {}, 'つかまえた数'), `${z.count}匹`,
                 el('b', {}, '最大記録'), `${z.maxSize.toFixed(1)}cm`));
