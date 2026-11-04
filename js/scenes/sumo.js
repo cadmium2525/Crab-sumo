@@ -743,7 +743,8 @@ export class SumoScene {
       if (playerWon) s.record.wins++; else s.record.losses++;
     }
     let rewardMsg = '';
-    if (this.rival && playerWon && !s.beaten[this.rival.id]) {
+    const firstWin = !!(this.rival && playerWon && !s.beaten[this.rival.id]);
+    if (firstWin) {
       s.beaten[this.rival.id] = true;
       const rw = this.rival.reward;
       if (rw?.tank) { s.capacity += rw.tank; rewardMsg = `水槽が ${60 + (Math.min(10, s.capacity) - 5) * 10}cm に大きくなった！（${s.capacity}匹まで飼える）`; }
@@ -751,7 +752,8 @@ export class SumoScene {
       if (rw?.title) { s.title = rw.title; rewardMsg = `称号「${rw.title}」を手に入れた！`; }
     }
     this.app.save();
-    if (this.rival) await sayBox(this.rival.name, playerWon ? this.rival.lose : this.rival.win, this.rival.color);
+    // ごほうびの話は初めて勝ったときだけ。再戦で勝ったときは別のセリフ
+    if (this.rival) await sayBox(this.rival.name, playerWon ? (firstWin ? this.rival.lose : this.rival.relose) : this.rival.win, this.rival.color);
     const c = this.f1.crab;
     modal((b, close) => {
       b.appendChild(el('p', { class: 'msg', style: 'text-align:center;font-size:20px;font-weight:900' },
