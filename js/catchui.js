@@ -31,7 +31,7 @@ export function catchFlow(app, crab, { how = 'hand' } = {}) {
             close(); finish(true);
           } }, '水槽に入れる'),
         el('button', { class: 'btn', onclick: () => { close(); toast(`${crab.name}を逃がした`); finish(false); } }, '逃がす')));
-    }, { title: sp.name + (crab.monster ? '（大物！）' : ''), onClose: () => finish(false) });
+    }, { title: crab.nushi ? `${sp.name}のヌシ！` : sp.name + (crab.monster ? '（大物！）' : ''), onClose: () => finish(false) });
   });
 }
 

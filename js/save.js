@@ -59,6 +59,7 @@ export function dateLabel(state) {
 export function registerZukan(state, crab) {
   const z = state.zukan[crab.species] || { count: 0, maxSize: 0, sample: null };
   z.count++;
+  if (crab.nushi) z.nushi = (z.nushi || 0) + 1;
   if (crab.size > z.maxSize) { z.maxSize = crab.size; z.sample = { ...crab, id: 'z_' + crab.species + '_' + crab.size }; }
   state.zukan[crab.species] = z;
 }

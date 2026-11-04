@@ -92,7 +92,9 @@ export class CrabModel {
     const shellT = shellTexture(look, seed);
     const limbT = shellTexture({ ...look, color: look.leg, color2: look.leg, pattern: look.pattern === 'spots' ? 'spots' : 'speckle', grooves: 0 }, seed + 7, 128);
     const clawT = shellTexture({ ...look, color: look.claw, color2: look.claw, pattern: look.pattern === 'spots' ? 'spots' : 'speckle', grooves: 0 }, seed + 13, 128);
-    const wet = { roughness: 0.5, clearcoat: 0.4, clearcoatRoughness: 0.32, envMapIntensity: 0.5 };
+    const wet = crab.nushi
+      ? { roughness: 0.35, clearcoat: 1, clearcoatRoughness: 0.12, envMapIntensity: 0.9 } // ヌシは黒光り
+      : { roughness: 0.5, clearcoat: 0.4, clearcoatRoughness: 0.32, envMapIntensity: 0.5 };
     this.mats = {
       shell: new THREE.MeshPhysicalMaterial({ map: shellT.map, normalMap: shellT.normalMap, normalScale: new THREE.Vector2(1.2, 1.2), ...wet }),
       under: new THREE.MeshPhysicalMaterial({ color: look.under, roughness: 0.5, clearcoat: 0.5, clearcoatRoughness: 0.3 }),

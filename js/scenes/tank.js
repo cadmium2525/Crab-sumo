@@ -508,10 +508,11 @@ export class TankScene {
                 el('b', {}, 'とり方'), howToCatch(id),
                 el('b', {}, '甲幅'), `${sp.size[0]}〜${sp.size[1]}cm`,
                 el('b', {}, 'つかまえた数'), `${z.count}匹`,
-                el('b', {}, '最大記録'), `${z.maxSize.toFixed(1)}cm`));
+                el('b', {}, '最大記録'), `${z.maxSize.toFixed(1)}cm`,
+                el('b', {}, 'ヌシ'), z.nushi ? `${z.nushi}匹 見つけた` : 'まだ見ていない（石の下にまれにいる）'));
               bb.appendChild(el('p', { class: 'desc' }, sp.desc));
             }, { title: sp.name });
-          } }, el('img', { src: crabThumbnail(z.sample, 160) }), el('div', { class: 'n' }, sp.name), el('div', { class: 'h' }, `${hab} ・ 最大${z.maxSize.toFixed(1)}cm`)));
+          } }, el('img', { src: crabThumbnail(z.sample, 160) }), el('div', { class: 'n' }, sp.name), el('div', { class: 'h' }, `${hab} ・ 最大${z.maxSize.toFixed(1)}cm`), z.nushi ? el('span', { class: 'tag nushi' }, 'ヌシ発見') : null));
         }
       }
       b.appendChild(grid);

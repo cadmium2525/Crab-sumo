@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { Outdoor, rockGeometry, grassField, treeCluster, terrain } from '../env.js';
 import { stumpTopTextures, barkTextures, groundTextures, rockTextures, skinTexture, getNoise, mulberry32 } from '../textures.js';
 import { CrabModel } from '../crab.js';
-import { SPECIES, SPECIES_ORDER, RIVALS, rivalCrab, makeCrab, overallPower } from '../data.js';
+import { SPECIES, SPECIES_ORDER, RIVALS, rivalCrab, makeCrab, overallPower, combatBuild, bodyBulk } from '../data.js';
 import { el, modal, toast, bigText, hideBigText, setHud, setActions, sayBox, crabCard } from '../ui.js';
 import * as Audio from '../audio.js';
 
@@ -20,7 +20,9 @@ class Fighter {
     this.side = side; // -1: 東(左/プレイヤー) +1: 西(右)
     const s = crab.stats;
     this.s = s;
-    this.build = Math.pow(crab.size / 3, 0.9);
+    this.build = combatBuild(crab);
+    this.bulk = bodyBulk(crab);
+    this.tiredSaid = false;
     this.k = 1;
     this.vs = model.scale;
     this.reach = model.scale * 0.95;
@@ -501,7 +503,8 @@ export class SumoScene {
       const toO = axis.clone().multiplyScalar(sgn);
       if (f.state !== 'flee' && f.state !== 'fall' && f.state !== 'flipped' && f.state !== 'step') {
         const want = Math.atan2(toO.y, toO.x);
-        f.heading += clamp(wrapAngle(want - f.heading), -dt * 4, dt * 4);
+        const turn = 4 / Math.sqrt(Math.max(1, f.bulk));
+        f.heading += clamp(wrapAngle(want - f.heading), -dt * turn, dt * turn);
       }
       f.stateT -= dt;
       switch (f.state) {
@@ -566,7 +569,10 @@ export class SumoScene {
       B.pos.addScaledVector(axis, v * dt);
       for (const [f, s] of [[A, 1], [B, -1]]) {
         const fwd = v * s;
-        f.stam = clamp(f.stam - dt * (Math.max(0.5, 2.2 - f.s.stamina * 0.15) + (f.burst > 0 ? 3 : 0)), 0, 100);
+        // 大きい体ほど押し合いでバテやすい
+        const heavy = Math.max(0, f.bulk - 1.6) * 0.5;
+        f.stam = clamp(f.stam - dt * (Math.max(0.5, 2.2 - f.s.stamina * 0.15) + heavy + (f.burst > 0 ? 3 : 0)), 0, 100);
+        if (f.stam < 25 && !f.tiredSaid) { f.tiredSaid = true; this.say(f, `${f.crab.name}がバテてきた！`); }
         if (fwd < -0.02) f.kiai -= -fwd * dt * 7 * (1.2 - f.s.temper / 15);
         else f.kiai += (Math.max(0, fwd) * 6 + (f.kiai < 45 ? 0.8 : 0)) * dt;
         f.kiai = clamp(f.kiai, 0, 100);
@@ -636,7 +642,7 @@ export class SumoScene {
       burst: 3 + f.s.power * 0.2,
       pinch: 1 + f.s.temper * 0.3 + f.claw,
       flip: ratio > 0.92 ? (ratio - 0.82) * 4 + (f.kiai > 60 ? 0.8 : 0) : 0.15,
-      side: fwd < -0.05 ? f.s.agility * 0.35 : f.s.agility * 0.05,
+      side: (fwd < -0.05 ? f.s.agility * 0.35 : f.s.agility * 0.05) * clamp(1 + (o.bulk / f.bulk - 1) * 0.3, 1, 3),
       rest: 1.6,
     };
     let tot = Object.values(w).reduce((a, b) => a + b, 0), r = Math.random() * tot, act = 'rest';
@@ -673,12 +679,13 @@ export class SumoScene {
         o.kiai = clamp(o.kiai - 4, 0, 100);
       }
     } else if (act === 'side') {
-      const okSide = f.s.agility * (0.5 + Math.random() * 0.7) > o.s.agility * (0.4 + Math.random() * 0.6);
+      const sizeEdge = 1 + clamp((o.bulk - f.bulk) * 0.15, 0, 0.8);
+      const okSide = f.s.agility * sizeEdge * (0.5 + Math.random() * 0.7) > o.s.agility * (0.4 + Math.random() * 0.6);
       if (okSide) {
         f.state = 'step'; f.stateT = 0.5;
         f.stepSign = Math.random() < 0.5 ? 1 : -1;
         f.stepDir = new THREE.Vector2(-toO.y, toO.x).multiplyScalar(f.stepSign);
-        o.state = 'lunge'; o.stateT = 0.7; o.lungeSp = 0.6 + o.force * 0.05;
+        o.state = 'lunge'; o.stateT = 0.7; o.lungeSp = 0.6 + o.force * 0.05 + o.bulk * 0.08; // 重いほど勢いあまって前へ
         this.say(f, `${f.crab.name}がいなした！`);
         Audio.sfx('click');
       } else {

@@ -619,7 +619,9 @@ export class FieldScene {
       return;
     }
     const pick = pickWeighted(tbl, r, (x) => x.w * x.t[this.slot]);
-    const crab = makeCrab(pick.id, Math.floor(r() * 1e9), { day: s.day });
+    // ごくまれに「ヌシ」（大型と互角に戦える、石の下の主）
+    const nushi = r() < (this.night ? 0.016 : 0.01);
+    const crab = makeCrab(pick.id, Math.floor(r() * 1e9), { day: s.day, nushi });
     const model = new CrabModel(crab);
     model.root.scale.setScalar(1.8); // 見やすさのため少し大きく
     model.root.position.set(rock.x, rock.y, rock.z);
@@ -628,7 +630,13 @@ export class FieldScene {
     this.crab = { crab, model, state: 'threat', t: 0.5 + crab.stats.temper * 0.08 + r() * 0.4, dir: null, speed: 0, tries: 0 };
     model.raiseT = 1; model.openT = 0.9;
     Audio.sfx('clack');
-    toast(`${SPECIES[crab.species].name}だ！`, 1500);
+    if (crab.nushi) {
+      this.crab.t += 0.8;
+      Audio.sfx('taiko');
+      this.shake = 0.3;
+      bigText('ヌシだ！！', { ms: 1600, cls: 'gold' });
+      toast(`黒光りする${SPECIES[crab.species].name}…… この石の主だ！`, 2600);
+    } else toast(`${SPECIES[crab.species].name}だ！`, 1500);
   }
 
   grab() {
@@ -667,7 +675,7 @@ export class FieldScene {
     c.state = 'flee';
     c.t = 0.7 + Math.random() * 0.8;
     const st = c.crab.stats;
-    c.speed = (1.1 + st.agility * 0.22) * mul;
+    c.speed = (1.1 + st.agility * 0.22) * mul * (c.crab.nushi ? 1.12 : 1);
     // 水の方向（低い方）へ逃げやすい
     let best = null, bestY = 99;
     for (let i = 0; i < 8; i++) {

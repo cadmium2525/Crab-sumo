@@ -86,6 +86,7 @@ body.in-sumo #toast { top: auto; bottom: calc(180px + var(--safe-b)); }
 .sex.m { color: #2f6f8f; } .sex.f { color: #c4506e; }
 .tag { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 6px; margin-left: 6px; background: #ddd; color: #333; font-weight: 700; vertical-align: 1px; }
 .tag.gold { background: var(--gold); color: #2b1a00; }
+.tag.nushi { background: #2b1a14; color: #ffd860; border: 1px solid #d4a020; }
 .card-mini { display: flex; gap: 10px; font-size: 12px; font-weight: 700; margin-top: 4px; flex-wrap: wrap; }
 .stats { margin-top: 6px; }
 .stat { display: flex; align-items: center; gap: 6px; font-size: 12px; height: 17px; }

@@ -126,7 +126,7 @@ export function crabCard(crab, { compact = false, extra = null, onclick = null, 
   const img = el('img', { class: 'thumb', alt: sp.name, src: crabThumbnail(crab, compact ? 120 : 180) });
   const head = el('div', { class: 'card-head' },
     el('div', { class: 'card-name' }, crab.name, el('span', { class: 'sex ' + crab.sex }, sexMark)),
-    el('div', { class: 'card-sp' }, sp.name + (crab.morph ? `（${crab.morph}）` : ''), crab.monster ? el('span', { class: 'tag gold' }, '大物') : null),
+    el('div', { class: 'card-sp' }, sp.name + (crab.morph ? `（${crab.morph}）` : ''), crab.monster ? el('span', { class: 'tag gold' }, '大物') : null, crab.nushi ? el('span', { class: 'tag nushi' }, 'ヌシ') : null),
     el('div', { class: 'card-meta' }, `甲幅 ${crab.size.toFixed(1)}cm ・ ${crab.trait}`),
   );
   const card = el('div', { class: 'card' + (compact ? ' compact' : '') + (selected ? ' selected' : ''), onclick },

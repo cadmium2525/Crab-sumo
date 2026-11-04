@@ -217,7 +217,9 @@ export function makeCrab(speciesId, seed = Math.floor(Math.random() * 1e9), opts
   if (opts.big) rel = Math.min(1, rel + 0.25 * r());
   let size = mn + (mx - mn) * rel;
   let monster = false;
-  if (r() < 0.03) { size *= 1.12 + r() * 0.08; monster = true; }
+  const nushi = !!opts.nushi;
+  if (nushi) size = mx * (1.0 + r() * 0.08);
+  else if (r() < 0.03) { size *= 1.12 + r() * 0.08; monster = true; }
   if (opts.size) { size = opts.size; rel = (size - mn) / (mx - mn); }
   const sex = opts.sex || (r() < 0.55 ? 'm' : 'f');
   const trait = opts.trait ? TRAITS.find((t) => t.name === opts.trait) : TRAITS[Math.floor(r() * TRAITS.length)];
@@ -230,6 +232,8 @@ export function makeCrab(speciesId, seed = Math.floor(Math.random() * 1e9), opts
     if (k === 'power' && sex === 'm') v += 0.5;
     if (k === 'power' && sex === 'f') v -= 0.4;
     v *= opts.statMul || 1;
+    // ヌシ：体は普通でも、力は大型のカニと互角
+    if (nushi) v = { power: Math.max(v, 9 + r() * 1.5), guard: Math.max(v, 8.5 + r()), stamina: Math.max(v, 9 + r()), agility: v + 1.5, temper: Math.max(v, 8 + r()) }[k];
     stats[k] = Math.max(1, Math.min(12, Math.round(v * 10) / 10));
   }
   // 見た目
@@ -239,19 +243,20 @@ export function makeCrab(speciesId, seed = Math.floor(Math.random() * 1e9), opts
     morph = pickWeighted(sp.morphs, r);
     look = { ...look, color: morph.color, color2: morph.color2, claw: morph.claw, leg: morph.leg };
   }
-  const dh = (r() - 0.5) * 0.04, ds = (r() - 0.5) * 0.12, dl = (r() - 0.5) * 0.1;
+  const dh = (r() - 0.5) * 0.04, ds = (r() - 0.5) * 0.12 - (nushi ? 0.08 : 0), dl = (r() - 0.5) * 0.1 - (nushi ? 0.16 : 0);
   for (const k of ['color', 'color2', 'claw', 'leg', 'spot']) if (look[k]) look[k] = shiftColor(look[k], dh, ds, dl);
-  const clawMul = (sex === 'm' ? 1.12 : 0.86) * (0.92 + r() * 0.16);
+  const clawMul = (sex === 'm' ? 1.12 : 0.86) * (0.92 + r() * 0.16) * (nushi ? 1.35 : 1);
   return {
     id: 'c' + (idCounter++) + '_' + Math.floor(r() * 1e6),
     species: speciesId,
-    name: sp.name,
+    name: nushi ? sp.name + 'のヌシ' : sp.name,
     seed,
     size: Math.round(size * 10) / 10,
     sex,
     trait: trait.name,
     morph: morph ? morph.label : null,
     monster,
+    nushi,
     stats,
     look,
     clawMul,
@@ -263,10 +268,17 @@ export function makeCrab(speciesId, seed = Math.floor(Math.random() * 1e9), opts
   };
 }
 
+// ヌシは体の大きさに見合わない力を持つ（相撲での体格を何倍に扱うか）
+export const NUSHI_BUILD = 3.6;
+// 体の大きさそのもの（スタミナの減りやすさ・小回りに効く）
+export function bodyBulk(c) { return Math.pow(c.size / 3, 0.9); }
+// 相撲での体格（押す力・踏ん張りに効く）
+export function combatBuild(c) { return bodyBulk(c) * (c.nushi ? NUSHI_BUILD : 1); }
+
 // 総合力（表示用）
 export function overallPower(c) {
   const s = c.stats;
-  const build = Math.pow(c.size / 3, 0.9);
+  const build = combatBuild(c);
   return Math.round((s.power * 1.2 + s.guard + s.stamina * 0.8 + s.agility * 0.6 + s.temper * 0.4) * Math.pow(build, 0.55) * 2.2);
 }
 
