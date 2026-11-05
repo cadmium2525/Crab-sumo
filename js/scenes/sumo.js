@@ -249,9 +249,15 @@ export class SumoScene {
     m.root.position.set(f.pos.x, f.fallY, f.pos.y);
     const hd = f.dir();
     m.root.rotation.set(0, Math.atan2(hd.x, hd.y), 0);
-    if (f.flip > 0) m.root.rotateZ(f.flip * Math.PI);
+    const h = m.height * f.k; // 足先から甲羅のてっぺんまで
+    if (f.flip > 0) { m.root.rotateZ(f.flip * Math.PI); m.root.position.y += Math.sin(f.flip * Math.PI / 2) * h; }
     if (f.lift > 0) { m.root.position.y += f.lift * f.vs * 0.6; m.root.rotateX(-f.lift * 0.5); }
-    if (f.state === 'fall') { m.root.rotateX(f.fallSpin || 0); }
+    if (f.state === 'fall') {
+      const sp = f.fallSpin || 0;
+      m.root.rotateX(sp);
+      // 回転中は体の中心で回して、地面にめり込まないように
+      m.root.position.y += Math.abs(Math.sin(sp / 2)) * h;
+    }
   }
 
   // ===== 進行 =====
@@ -488,7 +494,7 @@ export class SumoScene {
   stepBout(dt) {
     const A = this.f1, B = this.f2;
     this.boutT += dt;
-    for (const f of [A, B]) { f.pokeCd = Math.max(0, f.pokeCd - dt); f.burst = Math.max(0, f.burst - dt); }
+    for (const f of [A, B]) { f.pokeCd = Math.max(0, f.pokeCd - dt); f.burst = Math.max(0, f.burst - dt); f.flank = Math.max(0, (f.flank || 0) - dt); }
     // 相手AIのつつき
     if (!this.selfMode && this.rival && B.pokes > 0 && B.pokeCd <= 0) {
       const trouble = B.kiai < 25 || B.edge || B.state === 'flee' || B.state === 'flinch';
@@ -537,7 +543,7 @@ export class SumoScene {
           f.pos.addScaledVector(f.dir(), dt * f.lungeSp);
           f.lungeSp *= Math.exp(-dt * 2.5);
           f.model.pushT = 1;
-          if (f.stateT <= 0) f.state = 'approach';
+          if (f.stateT <= 0) { f.state = 'flinch'; f.stateT = 0.8; f.model.jolt = 1; } // つんのめってひるむ
           break;
         case 'flee': {
           f.fleeT += dt;
@@ -559,7 +565,7 @@ export class SumoScene {
     if (A.state === 'clinch' && B.state === 'clinch') {
       if (!contact && dist > (A.reach + B.reach) * 0.8) { A.state = 'approach'; B.state = 'approach'; }
       const wob = (f, k) => 1 + Math.sin(this.time * (1.3 + k) + f.side) * 0.12 + (Math.random() - 0.5) * 0.08;
-      const force = (f) => f.s.power * Math.pow(f.build, 0.8) * (0.5 + f.kiai / 100) * (0.35 + 0.65 * f.stam / 100) * (f.burst > 0 ? 1.7 : 1);
+      const force = (f) => f.s.power * Math.pow(f.build, 0.8) * (0.5 + f.kiai / 100) * (0.35 + 0.65 * f.stam / 100) * (f.burst > 0 ? 1.7 : 1) * (f.flank > 0 ? 1.4 : 1);
       const resist = (f) => f.s.guard * Math.pow(f.build, 0.9) * (f.edge ? 1.3 : 1);
       const FA = force(A) * wob(A, 0), FB = force(B) * wob(B, 0.4);
       A.force = FA; B.force = FB;
@@ -593,7 +599,7 @@ export class SumoScene {
     // ひるんだ相手を押し込む
     for (const [f, o, s] of [[A, B, 1], [B, A, -1]]) {
       if (f.state === 'clinch' && (o.state === 'flinch' || o.state === 'approach') && contact) {
-        const v = clamp(f.s.power * Math.pow(f.build, 0.8) / (o.s.guard * Math.pow(o.build, 0.9) * 2), 0, 0.6) * (o.state === 'flinch' ? 1 : 0.4);
+        const v = clamp(f.s.power * Math.pow(f.build, 0.8) / (o.s.guard * Math.pow(o.build, 0.9) * 2), 0, 0.6) * (o.state === 'flinch' ? 1 : 0.4) * (f.flank > 0 ? 1.5 : 1);
         A.pos.addScaledVector(axis, v * s * dt);
         B.pos.addScaledVector(axis, v * s * dt);
         f.model.pushT = 1;
@@ -685,11 +691,14 @@ export class SumoScene {
         f.state = 'step'; f.stateT = 0.5;
         f.stepSign = Math.random() < 0.5 ? 1 : -1;
         f.stepDir = new THREE.Vector2(-toO.y, toO.x).multiplyScalar(f.stepSign);
-        o.state = 'lunge'; o.stateT = 0.7; o.lungeSp = 0.6 + o.force * 0.05 + o.bulk * 0.08; // 重いほど勢いあまって前へ
-        this.say(f, `${f.crab.name}がいなした！`);
+        o.state = 'lunge'; o.stateT = 0.55; o.lungeSp = 0.6 + o.force * 0.05 + o.bulk * 0.08; // 重いほど勢いあまって前へ
+        o.kiai = clamp(o.kiai - 8, 0, 100);
+        f.kiai = clamp(f.kiai + 6, 0, 100);
+        f.flank = 2.2; // 横から押し込むチャンス
+        toast(`${f.crab.name}がいなした！　${o.crab.name}がつんのめった！`, 1500);
         Audio.sfx('click');
       } else {
-        f.pos.addScaledVector(toO, -0.08);
+        f.pos.addScaledVector(toO, -0.04);
       }
     }
     f.stam = clamp(f.stam, 0, 100);
@@ -864,8 +873,15 @@ export class SumoScene {
         f.fallV += dt * 9.8;
         f.fallY -= f.fallV * dt * 0.5;
         f.pos.addScaledVector(f.fallDir, dt * 0.9);
-        f.fallSpin = (f.fallSpin || 0) + dt * 4;
-        if (f.fallY < -2 + 0.05) { f.fallY = -2 + 0.05; f.fallV = 0; f.fallDir.set(0, 0); }
+        if (!f.landed) {
+          f.fallSpin = (f.fallSpin || 0) + dt * 5;
+          if (f.fallY < -2 + 0.02) { f.fallY = -2 + 0.02; f.fallV = 0; f.fallDir.set(0, 0); f.landed = true; f.restSpin = Math.round(f.fallSpin / Math.PI) * Math.PI; Audio.sfx('thud'); }
+        } else {
+          f.fallSpin += (f.restSpin - f.fallSpin) * Math.min(1, dt * 8);
+          f.fallY = -2 + 0.02;
+          const upside = Math.round(f.restSpin / Math.PI) % 2 !== 0;
+          m.walk = upside ? 1.6 : 0; m.legSpeed = 2.5; m.pushT = 0; m.raiseT = upside ? 0.3 : 0.6;
+        }
       }
       if (f.state === 'flipped') { m.walk = 1.6; m.legSpeed = 2.5; m.raiseT = 0.3; m.pushT = 0; }
       if (f.state === 'win') { m.walk = 0; m.pushT = 0; m.raiseT = 1; m.openT = 0.9 + Math.sin(this.time * 6) * 0.1; }
